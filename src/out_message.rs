@@ -1,7 +1,7 @@
-use std::borrow::Cow;
+use std::{io::Cursor};
 
 use tokio::io::AsyncWriteExt;
-use tungstenite::{Message, protocol::{CloseFrame, frame::coding::CloseCode}, Result};
+use tungstenite::{Message, Result};
 use uuid::Uuid;
 
 pub enum WorldHostOutMessage {
@@ -12,19 +12,28 @@ pub enum WorldHostOutMessage {
 
 impl WorldHostOutMessage {
     pub async fn write(&self) -> Result<Message> {
+        let mut vec = Vec::with_capacity(16);
+        let mut writer = Cursor::new(&mut vec);
         match self {
-            Self::Error(message) => Ok(Message::Close(Option::Some(CloseFrame {
-                code: CloseCode::Protocol,
-                reason: Cow::Owned(message.to_owned())
-            }))),
-            Self::IsOnlineTo(user) => Ok(Message::Text(user.to_string())),
+            Self::Error(message) => {
+                writer.write_u8(0).await?;
+                write_string(&mut writer, message).await?;
+            },
+            Self::IsOnlineTo(user) => {
+                writer.write_u8(1).await?;
+                write_string(&mut writer, user).await?;
+            },
             Self::OnlineGame(connection_id) => {
-                let mut vec = Vec::with_capacity(16);
                 let (most, least) = connection_id.as_u64_pair();
-                vec.write_u64(most).await?;
-                vec.write_u64(least).await?;
-                Ok(Message::Binary(vec))
+                writer.write_u64(most).await?;
+                writer.write_u64(least).await?;
             }
-        }
+        };
+        Ok(Message::Binary(vec))
     }
+}
+
+async fn write_string(writer: &mut Cursor<&mut Vec<u8>>, string: &str) -> Result<()> {
+    writer.write(string.as_bytes()).await?;
+    Ok(())
 }
