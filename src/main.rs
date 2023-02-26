@@ -6,6 +6,7 @@ use std::io::Error;
 mod connection;
 mod in_message;
 mod out_message;
+mod util;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
