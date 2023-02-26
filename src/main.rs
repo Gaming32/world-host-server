@@ -4,6 +4,8 @@ use tokio::net::TcpListener;
 use std::io::Error;
 
 mod connection;
+mod in_message;
+mod out_message;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -31,7 +33,7 @@ async fn main() -> Result<(), Error> {
     info!("Listening on {}", addr);
 
     while let Ok((stream, _)) = listener.accept().await {
-        tokio::spawn(connection::process_connection(stream));
+        tokio::spawn(connection::accept_connection(stream));
     }
 
     Ok(())
