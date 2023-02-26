@@ -19,4 +19,4 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           name: release-${{ matrix.os }}
-          path: target/release/world_host_server${{ matrix.os == "windows" && ".exe" || "" }}
+          path: target/release/world_host_server${{ matrix.os == 'windows' && '.exe' || '' }}
