@@ -25,7 +25,7 @@ async fn handle_connection(stream: TcpStream) -> Result<()> {
         let msg = msg?;
         if msg.is_binary() {
             let data = &msg.into_data() as &[u8];
-            let message = match read_message(data).await {
+            let _message = match read_message(data).await {
                 Ok(message) => message,
                 Err(err) => {
                     ws_stream.send(WorldHostOutMessage::Error(err.to_string()).write()).await?;

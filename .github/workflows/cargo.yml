@@ -17,9 +17,9 @@ jobs:
           command: build
           args: --release --all-features
       - uses: actions/upload-artifact@v3
+        if: matrix.os == "windows"
         with:
-          name: release-${{ matrix.os }}
+          name: release-windows
           path: |
-            target/release/world_host_server.pdb
-            target/release/world_host_server.exe
-            target/release/world_host_server
+            target/release/world_host_server*
+            !target/release/world_host_server.d
