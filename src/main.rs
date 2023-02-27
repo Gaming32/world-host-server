@@ -13,6 +13,7 @@ mod in_message;
 mod out_message;
 mod util;
 
+#[derive(Debug)]
 pub struct ServerConfig {
     addr: String,
     base_ip: String
@@ -36,7 +37,7 @@ async fn main() -> Result<(), Error> {
         .env()
         .init()
         .unwrap();
-    info!("Starting world-host-server...");
+    info!("Starting world-host-server with {:?}", config);
 
     let listener = match TcpListener::bind(&config.addr).await {
         Ok(listener) => listener,
