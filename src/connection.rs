@@ -111,7 +111,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                     connection.lock()
                         .await
                         .stream
-                        .send(WorldHostOutMessage::Error(err.to_string()).write().await?)
+                        .send(WorldHostOutMessage::Error { message: err.to_string() }.write().await?)
                         .await?;
                     continue;
                 }
@@ -119,10 +119,10 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
             match message {
                 WorldHostInMessage::ListOnline { friends } => {
                     let connection = connection.lock().await;
-                    let message = WorldHostOutMessage::IsOnlineTo(
-                        connection.username.to_string(),
-                        connection.id
-                    ).write().await?;
+                    let message = WorldHostOutMessage::IsOnlineTo {
+                        user: connection.username.to_string(),
+                        connection_id: connection.id
+                    }.write().await?;
                     for friend in friends {
                         let connections = connections.lock().await;
                         if let Some(connection_ids) = connections.by_username(&friend) {
@@ -136,12 +136,12 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 },
                 WorldHostInMessage::IsOnlineTo { connection_id } => {
                     let connection = connection.lock().await;
-                    let message = WorldHostOutMessage::OnlineGame(match connection.state {
+                    let message = WorldHostOutMessage::OnlineGame { ip: match connection.state {
                         ConnectionState::UPnP { port } => connection.address.to_string() + ":" + &port.to_string(),
                         ConnectionState::Proxy if !config.base_ip.is_empty() =>
                             "connect0000-".to_string() + &connection.id.to_string() + "." + &config.base_ip,
                         _ => continue
-                    }).write().await?;
+                    }}.write().await?;
                     if let Some(conn) = connections.lock().await.by_id(&connection_id) {
                         conn.lock().await.stream.send(message.clone()).await?;
                     }
