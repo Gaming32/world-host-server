@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 pub enum WorldHostOutMessage {
     Error(String),
-    IsOnlineTo(String),
-    OnlineGame(Uuid)
+    IsOnlineTo(String, Uuid),
+    OnlineGame(String)
 }
 
 impl WorldHostOutMessage {
@@ -19,14 +19,16 @@ impl WorldHostOutMessage {
                 writer.write_u8(0).await?;
                 write_string(&mut writer, message).await?;
             },
-            Self::IsOnlineTo(user) => {
+            Self::IsOnlineTo(user, connection_id) => {
                 writer.write_u8(1).await?;
                 write_string(&mut writer, user).await?;
-            },
-            Self::OnlineGame(connection_id) => {
                 let (most, least) = connection_id.as_u64_pair();
                 writer.write_u64(most).await?;
                 writer.write_u64(least).await?;
+            },
+            Self::OnlineGame(ip) => {
+                writer.write_u8(2).await?;
+                write_string(&mut writer, ip).await?;
             }
         };
         Ok(Message::Binary(vec))

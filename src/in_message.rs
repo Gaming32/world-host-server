@@ -1,6 +1,7 @@
 use std::{error::Error, fmt::Display, io::{Cursor}};
 
 use tokio::io::AsyncReadExt;
+use uuid::Uuid;
 
 use crate::util::DynResult;
 
@@ -18,7 +19,7 @@ impl Error for UnknownTypeIdError {
 
 pub enum WorldHostInMessage {
     ListOnline { friends: Vec<String> },
-    IsOnlineTo { user: String, is_online: bool }
+    IsOnlineTo { connection_id: Uuid }
 }
 
 pub async fn read_message(mut reader: Cursor<Vec<u8>>) -> DynResult<WorldHostInMessage> {
@@ -33,8 +34,10 @@ pub async fn read_message(mut reader: Cursor<Vec<u8>>) -> DynResult<WorldHostInM
         }
         1 => {
             Ok(WorldHostInMessage::IsOnlineTo {
-                user: read_string(&mut reader).await?,
-                is_online: reader.read_u8().await? != 0
+                connection_id: Uuid::from_u64_pair(
+                    reader.read_u64().await?,
+                    reader.read_u64().await?
+                )
             })
         }
         type_id => Err(Box::new(UnknownTypeIdError(type_id)))
