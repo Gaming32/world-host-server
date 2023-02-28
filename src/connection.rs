@@ -8,7 +8,7 @@ use tokio_tungstenite::WebSocketStream;
 use tungstenite::{Result, Error, protocol::{CloseFrame, frame::coding::CloseCode}};
 use uuid::Uuid;
 
-use crate::{in_message::{read_message, WorldHostInMessage}, out_message::WorldHostOutMessage, ServerConfig};
+use crate::{in_message::{read_message, WorldHostInMessage, read_uuid}, out_message::WorldHostOutMessage, ServerConfig};
 
 #[derive(Debug)]
 #[repr(u8)]
@@ -21,27 +21,27 @@ pub enum ConnectionState {
 pub struct Connection {
     id: Uuid,
     address: SocketAddr,
-    username: String,
+    user_uuid: Uuid,
     state: ConnectionState,
     stream: WebSocketStream<TcpStream>
 }
 
 impl Display for Connection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Connection(id={}, addr={}, username={})", self.id, self.address, self.username)
+        write!(f, "Connection(id={}, addr={}, user={})", self.id, self.address, self.user_uuid)
     }
 }
 
 pub struct ConnectionsSetSync {
     connections: HashMap<Uuid, Arc<Mutex<Connection>>>,
-    connections_by_username: HashMap<String, Vec<Uuid>>
+    connections_by_user_id: HashMap<Uuid, Vec<Uuid>>
 }
 
 impl ConnectionsSetSync {
     pub fn new() -> ConnectionsSetSync {
         ConnectionsSetSync {
             connections: HashMap::new(),
-            connections_by_username: HashMap::new()
+            connections_by_user_id: HashMap::new()
         }
     }
 
@@ -49,12 +49,12 @@ impl ConnectionsSetSync {
         self.connections.get(id)
     }
 
-    pub fn by_username(&self, username: &String) -> Option<&Vec<Uuid>> {
-        self.connections_by_username.get(username)
+    pub fn by_user_id(&self, user_id: &Uuid) -> Option<&Vec<Uuid>> {
+        self.connections_by_user_id.get(user_id)
     }
 
     pub async fn add(&mut self, connection: &Arc<Mutex<Connection>>) {
-        self.connections_by_username.entry(connection.lock().await.username.clone())
+        self.connections_by_user_id.entry(connection.lock().await.user_uuid.clone())
             .or_insert_with(|| Vec::<Uuid>::new())
             .push(connection.lock().await.id);
         self.connections.insert(connection.lock().await.id, connection.clone());
@@ -80,17 +80,26 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
 
     let connection = if let Some(msg) = ws_stream.next().await {
         let msg = msg?;
-        if !msg.is_text() {
-            warn!("Invalid handshake from {}: not text ({:?}).", peer_addr, msg);
+        if !msg.is_binary() {
+            warn!("Invalid handshake from {}: not binary ({:?}).", peer_addr, msg);
             return ws_stream.close(Some(CloseFrame {
                 code: CloseCode::Invalid,
-                reason: Cow::Borrowed("Invalid handshake: not text.")
+                reason: Cow::Borrowed("Invalid handshake: not binary.")
             })).await;
         }
         Arc::new(Mutex::new(Connection {
             id: Uuid::new_v4(),
             address: peer_addr,
-            username: msg.into_text()?,
+            user_uuid: match read_uuid(&mut Cursor::new(msg.into_data())).await {
+                Ok(uuid) => uuid,
+                Err(err) => {
+                    warn!("Invalid handshake from {}: failed to read UUID ({}).", peer_addr, err);
+                    return ws_stream.close(Some(CloseFrame {
+                        code: CloseCode::Invalid,
+                        reason: Cow::Borrowed("Invalid handshake: failed to read UUID.")
+                    })).await;
+                }
+            },
             state: ConnectionState::Closed,
             stream: ws_stream
         }))
@@ -122,12 +131,12 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 WorldHostInMessage::ListOnline { friends } => {
                     let connection = connection.lock().await;
                     let message = WorldHostOutMessage::IsOnlineTo {
-                        user: connection.username.to_string(),
+                        user: connection.user_uuid.to_string(),
                         connection_id: connection.id
                     }.write().await?;
                     for friend in friends {
                         let connections = connections.lock().await;
-                        if let Some(connection_ids) = connections.by_username(&friend) {
+                        if let Some(connection_ids) = connections.by_user_id(&friend) {
                             for conn_id in connection_ids {
                                 if let Some(conn) = connections.by_id(conn_id) {
                                     conn.lock().await.stream.send(message.clone()).await?;
@@ -158,10 +167,10 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 }
                 WorldHostInMessage::FriendRequest { to_user } => {
                     let message = WorldHostOutMessage::FriendRequest {
-                        from_user: connection.lock().await.username.to_string()
+                        from_user: connection.lock().await.user_uuid.to_string()
                     }.write().await?;
                     let connections = connections.lock().await;
-                    if let Some(connection_ids) = connections.by_username(&to_user) {
+                    if let Some(connection_ids) = connections.by_user_id(&to_user) {
                         for conn_id in connection_ids {
                             if let Some(conn) = connections.by_id(conn_id) {
                                 conn.lock().await.stream.send(message.clone()).await?;
