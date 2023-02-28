@@ -131,7 +131,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 WorldHostInMessage::ListOnline { friends } => {
                     let connection = connection.lock().await;
                     let message = WorldHostOutMessage::IsOnlineTo {
-                        user: connection.user_uuid.to_string(),
+                        user: connection.user_uuid,
                         connection_id: connection.id
                     }.write().await?;
                     for friend in friends {
@@ -177,7 +177,23 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                             }
                         }
                     }
-                }
+                },
+                WorldHostInMessage::WentInGame { friends } => {
+                    let connection = connection.lock().await;
+                    let message = WorldHostOutMessage::WentInGame {
+                        user: connection.user_uuid
+                    }.write().await?;
+                    for friend in friends {
+                        let connections = connections.lock().await;
+                        if let Some(connection_ids) = connections.by_user_id(&friend) {
+                            for conn_id in connection_ids {
+                                if let Some(conn) = connections.by_id(conn_id) {
+                                    conn.lock().await.stream.send(message.clone()).await?;
+                                }
+                            }
+                        }
+                    }
+                },
             }
         }
     }

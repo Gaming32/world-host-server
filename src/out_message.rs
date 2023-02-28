@@ -6,9 +6,10 @@ use uuid::Uuid;
 
 pub enum WorldHostOutMessage {
     Error { message: String },
-    IsOnlineTo { user: String, connection_id: Uuid },
+    IsOnlineTo { user: Uuid, connection_id: Uuid },
     OnlineGame { ip: String },
-    FriendRequest { from_user: String }
+    FriendRequest { from_user: String },
+    WentInGame { user: Uuid }
 }
 
 impl WorldHostOutMessage {
@@ -22,10 +23,8 @@ impl WorldHostOutMessage {
             },
             Self::IsOnlineTo { user, connection_id } => {
                 writer.write_u8(1).await?;
-                write_string(&mut writer, user).await?;
-                let (most, least) = connection_id.as_u64_pair();
-                writer.write_u64(most).await?;
-                writer.write_u64(least).await?;
+                write_uuid(&mut writer, user).await?;
+                write_uuid(&mut writer, connection_id).await?;
             },
             Self::OnlineGame { ip } => {
                 writer.write_u8(2).await?;
@@ -34,10 +33,21 @@ impl WorldHostOutMessage {
             Self::FriendRequest { from_user } => {
                 writer.write_u8(3).await?;
                 write_string(&mut writer, from_user).await?;
+            },
+            Self::WentInGame { user } => {
+                writer.write_u8(4).await?;
+                write_uuid(&mut writer, user).await?;
             }
         };
         Ok(Message::Binary(vec))
     }
+}
+
+pub async fn write_uuid(writer: &mut Cursor<&mut Vec<u8>>, uuid: &Uuid) -> Result<()> {
+    let (most, least) = uuid.as_u64_pair();
+    writer.write_u64(most).await?;
+    writer.write_u64(least).await?;
+    Ok(())
 }
 
 async fn write_string(writer: &mut Cursor<&mut Vec<u8>>, string: &str) -> Result<()> {
