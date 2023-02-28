@@ -111,7 +111,9 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                     connection.lock()
                         .await
                         .stream
-                        .send(WorldHostOutMessage::Error { message: err.to_string() }.write().await?)
+                        .send(WorldHostOutMessage::Error {
+                            message: err.to_string()
+                        }.write().await?)
                         .await?;
                     continue;
                 }
@@ -135,15 +137,36 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                     }
                 },
                 WorldHostInMessage::IsOnlineTo { connection_id } => {
-                    let connection = connection.lock().await;
+                    let mut connection = connection.lock().await;
                     let message = WorldHostOutMessage::OnlineGame { ip: match connection.state {
+                        ConnectionState::Closed => continue,
                         ConnectionState::UPnP { port } => connection.address.to_string() + ":" + &port.to_string(),
                         ConnectionState::Proxy if !config.base_ip.is_empty() =>
                             "connect0000-".to_string() + &connection.id.to_string() + "." + &config.base_ip,
-                        _ => continue
+                        ConnectionState::Proxy => {
+                            connection.stream
+                                .send(WorldHostOutMessage::Error {
+                                    message: "This World Host server does not support Proxy mode hosting.".to_string()
+                                }.write().await?)
+                                .await?;
+                            continue;
+                        }
                     }}.write().await?;
                     if let Some(conn) = connections.lock().await.by_id(&connection_id) {
                         conn.lock().await.stream.send(message.clone()).await?;
+                    }
+                }
+                WorldHostInMessage::FriendRequest { to_user } => {
+                    let message = WorldHostOutMessage::FriendRequest {
+                        from_user: connection.lock().await.username.to_string()
+                    }.write().await?;
+                    let connections = connections.lock().await;
+                    if let Some(connection_ids) = connections.by_username(&to_user) {
+                        for conn_id in connection_ids {
+                            if let Some(conn) = connections.by_id(conn_id) {
+                                conn.lock().await.stream.send(message.clone()).await?;
+                            }
+                        }
                     }
                 }
             }
@@ -151,6 +174,5 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
     }
 
     info!("Connection closed: {}.", *connection.lock().await);
-
     Ok(())
 }

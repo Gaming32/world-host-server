@@ -7,7 +7,8 @@ use uuid::Uuid;
 pub enum WorldHostOutMessage {
     Error { message: String },
     IsOnlineTo { user: String, connection_id: Uuid },
-    OnlineGame { ip: String }
+    OnlineGame { ip: String },
+    FriendRequest { from_user: String }
 }
 
 impl WorldHostOutMessage {
@@ -29,6 +30,10 @@ impl WorldHostOutMessage {
             Self::OnlineGame { ip } => {
                 writer.write_u8(2).await?;
                 write_string(&mut writer, ip).await?;
+            },
+            Self::FriendRequest { from_user } => {
+                writer.write_u8(3).await?;
+                write_string(&mut writer, from_user).await?;
             }
         };
         Ok(Message::Binary(vec))

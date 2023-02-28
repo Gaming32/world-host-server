@@ -19,7 +19,8 @@ impl Error for UnknownTypeIdError {
 
 pub enum WorldHostInMessage {
     ListOnline { friends: Vec<String> },
-    IsOnlineTo { connection_id: Uuid }
+    IsOnlineTo { connection_id: Uuid },
+    FriendRequest { to_user: String },
 }
 
 pub async fn read_message(mut reader: Cursor<Vec<u8>>) -> DynResult<WorldHostInMessage> {
@@ -38,6 +39,11 @@ pub async fn read_message(mut reader: Cursor<Vec<u8>>) -> DynResult<WorldHostInM
                     reader.read_u64().await?,
                     reader.read_u64().await?
                 )
+            })
+        }
+        2 => {
+            Ok(WorldHostInMessage::FriendRequest {
+                to_user: read_string(&mut reader).await?
             })
         }
         type_id => Err(Box::new(UnknownTypeIdError(type_id)))
