@@ -51,6 +51,8 @@ pub async fn write_uuid(writer: &mut Cursor<&mut Vec<u8>>, uuid: &Uuid) -> Resul
 }
 
 async fn write_string(writer: &mut Cursor<&mut Vec<u8>>, string: &str) -> Result<()> {
-    writer.write(string.as_bytes()).await?;
+    let bytes = string.as_bytes();
+    writer.write_u16(bytes.len() as u16).await?;
+    writer.write(bytes).await?;
     Ok(())
 }
