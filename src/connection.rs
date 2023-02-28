@@ -8,7 +8,7 @@ use tokio_tungstenite::WebSocketStream;
 use tungstenite::{Result, Error, protocol::{CloseFrame, frame::coding::CloseCode}};
 use uuid::Uuid;
 
-use crate::{c2s_message::{read_message, WorldHostC2SMessage, read_uuid}, s2c_message::WorldHostS2CMessage, ServerConfig};
+use crate::{c2s_message::{WorldHostC2SMessage, read_uuid}, s2c_message::WorldHostS2CMessage, ServerConfig};
 
 #[derive(Debug)]
 #[repr(u8)]
@@ -114,7 +114,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
     while let Some(msg) = connection.lock().await.stream.next().await {
         let msg = msg?;
         if msg.is_binary() {
-            let message = match read_message(Cursor::new(msg.into_data())).await {
+            let message = match WorldHostC2SMessage::read(Cursor::new(msg.into_data())).await {
                 Ok(message) => message,
                 Err(err) => {
                     connection.lock()

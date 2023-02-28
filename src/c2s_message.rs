@@ -24,31 +24,33 @@ pub enum WorldHostC2SMessage {
     WentInGame { friends: Vec<Uuid> }
 }
 
-pub async fn read_message(mut reader: Cursor<Vec<u8>>) -> DynResult<WorldHostC2SMessage> {
-    match reader.read_u8().await? {
-        0 => {
-            let count = reader.read_u32().await?;
-            let mut result = Vec::new();
-            for _ in 0..count {
-                result.push(read_uuid(&mut reader).await?);
+impl WorldHostC2SMessage {
+    pub async fn read(mut reader: Cursor<Vec<u8>>) -> DynResult<WorldHostC2SMessage> {
+        match reader.read_u8().await? {
+            0 => {
+                let count = reader.read_u32().await?;
+                let mut result = Vec::new();
+                for _ in 0..count {
+                    result.push(read_uuid(&mut reader).await?);
+                }
+                Ok(Self::ListOnline { friends: result })
             }
-            Ok(WorldHostC2SMessage::ListOnline { friends: result })
-        }
-        1 => Ok(WorldHostC2SMessage::IsOnlineTo {
-            connection_id: read_uuid(&mut reader).await?
-        }),
-        2 => Ok(WorldHostC2SMessage::FriendRequest {
-            to_user: read_uuid(&mut reader).await?
-        }),
-        3 => {
-            let count = reader.read_u32().await?;
-            let mut result = Vec::new();
-            for _ in 0..count {
-                result.push(read_uuid(&mut reader).await?);
+            1 => Ok(Self::IsOnlineTo {
+                connection_id: read_uuid(&mut reader).await?
+            }),
+            2 => Ok(Self::FriendRequest {
+                to_user: read_uuid(&mut reader).await?
+            }),
+            3 => {
+                let count = reader.read_u32().await?;
+                let mut result = Vec::new();
+                for _ in 0..count {
+                    result.push(read_uuid(&mut reader).await?);
+                }
+                Ok(Self::WentInGame { friends: result })
             }
-            Ok(WorldHostC2SMessage::WentInGame { friends: result })
+            type_id => Err(Box::new(UnknownTypeIdError(type_id)))
         }
-        type_id => Err(Box::new(UnknownTypeIdError(type_id)))
     }
 }
 
