@@ -8,9 +8,9 @@ use std::{io::Error, sync::Arc};
 
 use crate::connection::ConnectionsSetSync;
 
+mod c2s_message;
 mod connection;
-mod in_message;
-mod out_message;
+mod s2c_message;
 mod util;
 
 #[derive(Debug)]

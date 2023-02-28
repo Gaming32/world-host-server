@@ -8,7 +8,7 @@ use tokio_tungstenite::WebSocketStream;
 use tungstenite::{Result, Error, protocol::{CloseFrame, frame::coding::CloseCode}};
 use uuid::Uuid;
 
-use crate::{in_message::{read_message, WorldHostInMessage, read_uuid}, out_message::WorldHostOutMessage, ServerConfig};
+use crate::{c2s_message::{read_message, WorldHostC2SMessage, read_uuid}, s2c_message::WorldHostS2CMessage, ServerConfig};
 
 #[derive(Debug)]
 #[repr(u8)]
@@ -120,7 +120,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                     connection.lock()
                         .await
                         .stream
-                        .send(WorldHostOutMessage::Error {
+                        .send(WorldHostS2CMessage::Error {
                             message: err.to_string()
                         }.write().await?)
                         .await?;
@@ -128,9 +128,9 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 }
             };
             match message {
-                WorldHostInMessage::ListOnline { friends } => {
+                WorldHostC2SMessage::ListOnline { friends } => {
                     let connection = connection.lock().await;
-                    let message = WorldHostOutMessage::IsOnlineTo {
+                    let message = WorldHostS2CMessage::IsOnlineTo {
                         user: connection.user_uuid,
                         connection_id: connection.id
                     }.write().await?;
@@ -145,16 +145,16 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                         }
                     }
                 },
-                WorldHostInMessage::IsOnlineTo { connection_id } => {
+                WorldHostC2SMessage::IsOnlineTo { connection_id } => {
                     let mut connection = connection.lock().await;
-                    let message = WorldHostOutMessage::OnlineGame { ip: match connection.state {
+                    let message = WorldHostS2CMessage::OnlineGame { ip: match connection.state {
                         ConnectionState::Closed => continue,
                         ConnectionState::UPnP { port } => connection.address.to_string() + ":" + &port.to_string(),
                         ConnectionState::Proxy if !config.base_ip.is_empty() =>
                             "connect0000-".to_string() + &connection.id.to_string() + "." + &config.base_ip,
                         ConnectionState::Proxy => {
                             connection.stream
-                                .send(WorldHostOutMessage::Error {
+                                .send(WorldHostS2CMessage::Error {
                                     message: "This World Host server does not support Proxy mode hosting.".to_string()
                                 }.write().await?)
                                 .await?;
@@ -165,8 +165,8 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                         conn.lock().await.stream.send(message.clone()).await?;
                     }
                 }
-                WorldHostInMessage::FriendRequest { to_user } => {
-                    let message = WorldHostOutMessage::FriendRequest {
+                WorldHostC2SMessage::FriendRequest { to_user } => {
+                    let message = WorldHostS2CMessage::FriendRequest {
                         from_user: connection.lock().await.user_uuid.to_string()
                     }.write().await?;
                     let connections = connections.lock().await;
@@ -178,9 +178,9 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                         }
                     }
                 },
-                WorldHostInMessage::WentInGame { friends } => {
+                WorldHostC2SMessage::WentInGame { friends } => {
                     let connection = connection.lock().await;
-                    let message = WorldHostOutMessage::WentInGame {
+                    let message = WorldHostS2CMessage::WentInGame {
                         user: connection.user_uuid
                     }.write().await?;
                     for friend in friends {

@@ -4,7 +4,7 @@ use tokio::io::AsyncWriteExt;
 use tungstenite::{Message, Result};
 use uuid::Uuid;
 
-pub enum WorldHostOutMessage {
+pub enum WorldHostS2CMessage {
     Error { message: String },
     IsOnlineTo { user: Uuid, connection_id: Uuid },
     OnlineGame { ip: String },
@@ -12,7 +12,7 @@ pub enum WorldHostOutMessage {
     WentInGame { user: Uuid }
 }
 
-impl WorldHostOutMessage {
+impl WorldHostS2CMessage {
     pub async fn write(&self) -> Result<Message> {
         let mut vec = Vec::with_capacity(16);
         let mut writer = Cursor::new(&mut vec);

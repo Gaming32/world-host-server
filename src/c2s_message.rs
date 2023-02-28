@@ -17,14 +17,14 @@ impl Display for UnknownTypeIdError {
 impl Error for UnknownTypeIdError {
 }
 
-pub enum WorldHostInMessage {
+pub enum WorldHostC2SMessage {
     ListOnline { friends: Vec<Uuid> },
     IsOnlineTo { connection_id: Uuid },
     FriendRequest { to_user: Uuid },
     WentInGame { friends: Vec<Uuid> }
 }
 
-pub async fn read_message(mut reader: Cursor<Vec<u8>>) -> DynResult<WorldHostInMessage> {
+pub async fn read_message(mut reader: Cursor<Vec<u8>>) -> DynResult<WorldHostC2SMessage> {
     match reader.read_u8().await? {
         0 => {
             let count = reader.read_u32().await?;
@@ -32,12 +32,12 @@ pub async fn read_message(mut reader: Cursor<Vec<u8>>) -> DynResult<WorldHostInM
             for _ in 0..count {
                 result.push(read_uuid(&mut reader).await?);
             }
-            Ok(WorldHostInMessage::ListOnline { friends: result })
+            Ok(WorldHostC2SMessage::ListOnline { friends: result })
         }
-        1 => Ok(WorldHostInMessage::IsOnlineTo {
+        1 => Ok(WorldHostC2SMessage::IsOnlineTo {
             connection_id: read_uuid(&mut reader).await?
         }),
-        2 => Ok(WorldHostInMessage::FriendRequest {
+        2 => Ok(WorldHostC2SMessage::FriendRequest {
             to_user: read_uuid(&mut reader).await?
         }),
         3 => {
@@ -46,7 +46,7 @@ pub async fn read_message(mut reader: Cursor<Vec<u8>>) -> DynResult<WorldHostInM
             for _ in 0..count {
                 result.push(read_uuid(&mut reader).await?);
             }
-            Ok(WorldHostInMessage::WentInGame { friends: result })
+            Ok(WorldHostC2SMessage::WentInGame { friends: result })
         }
         type_id => Err(Box::new(UnknownTypeIdError(type_id)))
     }
