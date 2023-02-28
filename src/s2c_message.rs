@@ -8,7 +8,7 @@ pub enum WorldHostS2CMessage {
     Error { message: String },
     IsOnlineTo { user: Uuid, connection_id: Uuid },
     OnlineGame { ip: String },
-    FriendRequest { from_user: String },
+    FriendRequest { from_user: Uuid },
     WentInGame { user: Uuid }
 }
 
@@ -32,7 +32,7 @@ impl WorldHostS2CMessage {
             },
             Self::FriendRequest { from_user } => {
                 writer.write_u8(3).await?;
-                write_string(&mut writer, from_user).await?;
+                write_uuid(&mut writer, from_user).await?;
             },
             Self::WentInGame { user } => {
                 writer.write_u8(4).await?;

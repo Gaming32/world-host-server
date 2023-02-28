@@ -167,7 +167,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 }
                 WorldHostC2SMessage::FriendRequest { to_user } => {
                     let message = WorldHostS2CMessage::FriendRequest {
-                        from_user: connection.lock().await.user_uuid.to_string()
+                        from_user: connection.lock().await.user_uuid
                     }.write().await?;
                     let connections = connections.lock().await;
                     if let Some(connection_ids) = connections.by_user_id(&to_user) {
