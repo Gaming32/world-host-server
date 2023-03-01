@@ -146,21 +146,9 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                     }
                 }
                 WorldHostC2SMessage::IsOnlineTo { connection_id } => {
-                    let mut connection = connection.lock().await;
-                    let message = WorldHostS2CMessage::OnlineGame { ip: match connection.state {
-                        ConnectionState::Closed => continue,
-                        ConnectionState::UPnP { port } => connection.address.to_string() + ":" + &port.to_string(),
-                        ConnectionState::Proxy if !config.base_ip.is_empty() =>
-                            "connect0000-".to_string() + &connection.id.to_string() + "." + &config.base_ip,
-                        ConnectionState::Proxy => {
-                            connection.stream
-                                .send(WorldHostS2CMessage::Error {
-                                    message: "This World Host server does not support Proxy mode hosting.".to_string()
-                                }.write().await?)
-                                .await?;
-                            continue;
-                        }
-                    }}.write().await?;
+                    let message = WorldHostS2CMessage::PublishedWorld {
+                        user: connection.lock().await.user_uuid
+                    }.write().await?;
                     if let Some(conn) = connections.lock().await.by_id(&connection_id) {
                         conn.lock().await.stream.send(message.clone()).await?;
                     }
