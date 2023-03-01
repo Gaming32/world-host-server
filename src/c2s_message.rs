@@ -26,6 +26,8 @@ pub enum WorldHostC2SMessage {
     ClosedWorld { friends: Vec<Uuid> },
     RequestJoin { friend: Uuid },
     JoinGranted { connection_id: Uuid, join_type: JoinType },
+    QueryRequest { friend: Uuid },
+    QueryResponse { connection_id: Uuid, data: Vec<u8> },
 }
 
 impl WorldHostC2SMessage {
@@ -72,6 +74,17 @@ impl WorldHostC2SMessage {
                     join_type_id => return Err(Box::new(PresentMessageError(
                         format!("Received packet with unknown join_type_id from client: {join_type_id}")
                     )))
+                }
+            }),
+            7 => Ok(Self::QueryRequest {
+                friend: read_uuid(&mut reader).await?
+            }),
+            8 => Ok(Self::QueryResponse {
+                connection_id: read_uuid(&mut reader).await?,
+                data: {
+                    let mut buf = Vec::with_capacity(reader.read_u32().await? as usize);
+                    std::io::Read::read_exact(&mut reader, &mut buf)?;
+                    buf
                 }
             }),
             type_id => Err(Box::new(PresentMessageError(

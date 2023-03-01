@@ -12,6 +12,8 @@ pub enum WorldHostS2CMessage {
     PublishedWorld { user: Uuid },
     ClosedWorld { user: Uuid },
     RequestJoin { user: Uuid, connection_id: Uuid },
+    QueryRequest { friend: Uuid, connection_id: Uuid },
+    QueryResponse { friend: Uuid, data: Vec<u8> },
 }
 
 impl WorldHostS2CMessage {
@@ -48,6 +50,17 @@ impl WorldHostS2CMessage {
                 writer.write_u8(6).await?;
                 write_uuid(&mut writer, user).await?;
                 write_uuid(&mut writer, connection_id).await?;
+            }
+            Self::QueryRequest { friend, connection_id } => {
+                writer.write_u8(7).await?;
+                write_uuid(&mut writer, friend).await?;
+                write_uuid(&mut writer, connection_id).await?;
+            }
+            Self::QueryResponse { friend, data } => {
+                writer.write_u8(8).await?;
+                write_uuid(&mut writer, friend).await?;
+                writer.write_u32(data.len() as u32).await?;
+                writer.write_all(data).await?;
             }
         };
         Ok(Message::Binary(vec))

@@ -210,16 +210,40 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                     }
                 }
                 WorldHostC2SMessage::JoinGranted { connection_id, join_type } => {
-                    let connection = connection.lock().await;
                     let message = match join_type {
                         JoinType::UPnP { port } => WorldHostS2CMessage::OnlineGame {
                             ip: peer_addr.to_string(),
                             port
                         },
                         JoinType::Proxy => WorldHostS2CMessage::OnlineGame {
-                            ip: "connect0000-".to_string() + &connection.id.to_string() + "." + &config.base_ip,
+                            ip: "connect0000-".to_string() + &connection.lock().await.id.to_string() + "." + &config.base_ip,
                             port: 25565
                         }
+                    }.write().await?;
+                    let connections = connections.lock().await;
+                    if let Some(conn) = connections.by_id(&connection_id) {
+                        conn.lock().await.stream.send(message.clone()).await?;
+                    }
+                }
+                WorldHostC2SMessage::QueryRequest { friend } => {
+                    let connection = connection.lock().await;
+                    let message = WorldHostS2CMessage::QueryRequest {
+                        friend: connection.user_uuid,
+                        connection_id: connection.id
+                    }.write().await?;
+                    let connections = connections.lock().await;
+                    if let Some(connection_ids) = connections.by_user_id(&friend) {
+                        if let Some(conn_id) = connection_ids.last() {
+                            if let Some(conn) = connections.by_id(conn_id) {
+                                conn.lock().await.stream.send(message.clone()).await?;
+                            }
+                        }
+                    }
+                }
+                WorldHostC2SMessage::QueryResponse { connection_id, data } => {
+                    let message = WorldHostS2CMessage::QueryResponse {
+                        friend: connection.lock().await.user_uuid,
+                        data
                     }.write().await?;
                     let connections = connections.lock().await;
                     if let Some(conn) = connections.by_id(&connection_id) {
