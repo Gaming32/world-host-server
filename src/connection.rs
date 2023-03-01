@@ -54,7 +54,7 @@ impl ConnectionsSetSync {
         let locked_connection = connection.lock().await;
         self.connections_by_user_id.entry(locked_connection.user_uuid.clone())
             .or_insert_with(|| Vec::<Uuid>::new())
-            .push(locked_connection.id); // This statement deadlocks
+            .push(locked_connection.id);
         self.connections.insert(locked_connection.id, connection.clone());
     }
 }
