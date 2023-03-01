@@ -3,18 +3,18 @@ use std::{error::Error, fmt::Display, io::{Cursor}};
 use tokio::io::AsyncReadExt;
 use uuid::Uuid;
 
-use crate::util::DynResult;
+use crate::{util::DynResult, connection::JoinType};
 
 #[derive(Debug)]
-pub struct UnknownTypeIdError(u8);
+pub struct PresentMessageError(String);
 
-impl Display for UnknownTypeIdError {
+impl Display for PresentMessageError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "UnknownTypeIdError({})", self.0)
+        write!(f, "{}", self.0)
     }
 }
 
-impl Error for UnknownTypeIdError {
+impl Error for PresentMessageError {
 }
 
 #[derive(Debug)]
@@ -24,6 +24,8 @@ pub enum WorldHostC2SMessage {
     FriendRequest { to_user: Uuid },
     PublishedWorld { friends: Vec<Uuid> },
     ClosedWorld { friends: Vec<Uuid> },
+    RequestJoin { friend: Uuid },
+    JoinGranted { connection_id: Uuid, join_type: JoinType },
 }
 
 impl WorldHostC2SMessage {
@@ -59,7 +61,22 @@ impl WorldHostC2SMessage {
                 }
                 Ok(Self::ClosedWorld { friends: result })
             }
-            type_id => Err(Box::new(UnknownTypeIdError(type_id)))
+            5 => Ok(Self::RequestJoin {
+                friend: read_uuid(&mut reader).await?
+            }),
+            6 => Ok(Self::JoinGranted {
+                connection_id: read_uuid(&mut reader).await?,
+                join_type: match reader.read_u8().await? {
+                    0 => JoinType::UPnP { port: reader.read_u16().await? },
+                    1 => JoinType::Proxy,
+                    join_type_id => return Err(Box::new(PresentMessageError(
+                        format!("Received packet with unknown join_type_id from client: {join_type_id}")
+                    )))
+                }
+            }),
+            type_id => Err(Box::new(PresentMessageError(
+                format!("Received packet with unknown type_id from client: {type_id}")
+            )))
         }
     }
 }

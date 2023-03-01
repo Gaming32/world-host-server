@@ -11,6 +11,7 @@ pub enum WorldHostS2CMessage {
     FriendRequest { from_user: Uuid },
     PublishedWorld { user: Uuid },
     ClosedWorld { user: Uuid },
+    RequestJoin { user: Uuid, connection_id: Uuid },
 }
 
 impl WorldHostS2CMessage {
@@ -42,6 +43,11 @@ impl WorldHostS2CMessage {
             Self::ClosedWorld { user } => {
                 writer.write_u8(5).await?;
                 write_uuid(&mut writer, user).await?;
+            }
+            Self::RequestJoin { user, connection_id } => {
+                writer.write_u8(6).await?;
+                write_uuid(&mut writer, user).await?;
+                write_uuid(&mut writer, connection_id).await?;
             }
         };
         Ok(Message::Binary(vec))

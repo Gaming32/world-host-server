@@ -11,18 +11,15 @@ use uuid::Uuid;
 use crate::{c2s_message::{WorldHostC2SMessage, read_uuid}, s2c_message::WorldHostS2CMessage, ServerConfig};
 
 #[derive(Debug)]
-#[repr(u8)]
-pub enum ConnectionState {
-    Closed = 0,
-    UPnP { port: u16 } = 1,
-    Proxy = 2
+pub enum JoinType {
+    UPnP { port: u16 },
+    Proxy
 }
 
 pub struct Connection {
     id: Uuid,
     address: SocketAddr,
     user_uuid: Uuid,
-    state: ConnectionState,
     stream: WebSocketStream<TcpStream>
 }
 
@@ -101,7 +98,6 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                     })).await;
                 }
             },
-            state: ConnectionState::Closed,
             stream: ws_stream
         }))
     } else {
@@ -197,6 +193,37 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                                 }
                             }
                         }
+                    }
+                }
+                WorldHostC2SMessage::RequestJoin { friend } => {
+                    let message = WorldHostS2CMessage::RequestJoin {
+                        user: friend,
+                        connection_id: connection.lock().await.id
+                    }.write().await?;
+                    let connections = connections.lock().await;
+                    if let Some(connection_ids) = connections.by_user_id(&friend) {
+                        if let Some(conn_id) = connection_ids.last() {
+                            if let Some(conn) = connections.by_id(conn_id) {
+                                conn.lock().await.stream.send(message.clone()).await?;
+                            }
+                        }
+                    }
+                }
+                WorldHostC2SMessage::JoinGranted { connection_id, join_type } => {
+                    let connection = connection.lock().await;
+                    let message = match join_type {
+                        JoinType::UPnP { port } => WorldHostS2CMessage::OnlineGame {
+                            ip: peer_addr.to_string(),
+                            port
+                        },
+                        JoinType::Proxy => WorldHostS2CMessage::OnlineGame {
+                            ip: "connect0000-".to_string() + &connection.id.to_string() + "." + &config.base_ip,
+                            port: 25565
+                        }
+                    }.write().await?;
+                    let connections = connections.lock().await;
+                    if let Some(conn) = connections.by_id(&connection_id) {
+                        conn.lock().await.stream.send(message.clone()).await?;
                     }
                 }
             }
