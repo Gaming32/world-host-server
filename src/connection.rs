@@ -144,14 +144,6 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                         }
                     }
                 }
-                WorldHostC2SMessage::IsOnlineTo { connection_id } => {
-                    let message = WorldHostS2CMessage::PublishedWorld {
-                        user: connection.lock().await.user_uuid
-                    }.write().await?;
-                    if let Some(conn) = connections.lock().await.by_id(&connection_id) {
-                        conn.lock().await.stream.send(message.clone()).await?;
-                    }
-                }
                 WorldHostC2SMessage::FriendRequest { to_user } => {
                     let message = WorldHostS2CMessage::FriendRequest {
                         from_user: connection.lock().await.user_uuid

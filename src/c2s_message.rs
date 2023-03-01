@@ -20,7 +20,6 @@ impl Error for PresentMessageError {
 #[derive(Debug)]
 pub enum WorldHostC2SMessage {
     ListOnline { friends: Vec<Uuid> },
-    IsOnlineTo { connection_id: Uuid },
     FriendRequest { to_user: Uuid },
     PublishedWorld { friends: Vec<Uuid> },
     ClosedWorld { friends: Vec<Uuid> },
@@ -41,13 +40,10 @@ impl WorldHostC2SMessage {
                 }
                 Ok(Self::ListOnline { friends: result })
             }
-            1 => Ok(Self::IsOnlineTo {
-                connection_id: read_uuid(&mut reader).await?
-            }),
-            2 => Ok(Self::FriendRequest {
+            1 => Ok(Self::FriendRequest {
                 to_user: read_uuid(&mut reader).await?
             }),
-            3 => {
+            2 => {
                 let count = reader.read_u32().await?;
                 let mut result = Vec::new();
                 for _ in 0..count {
@@ -55,7 +51,7 @@ impl WorldHostC2SMessage {
                 }
                 Ok(Self::PublishedWorld { friends: result })
             }
-            4 => {
+            3 => {
                 let count = reader.read_u32().await?;
                 let mut result = Vec::new();
                 for _ in 0..count {
@@ -63,10 +59,10 @@ impl WorldHostC2SMessage {
                 }
                 Ok(Self::ClosedWorld { friends: result })
             }
-            5 => Ok(Self::RequestJoin {
+            4 => Ok(Self::RequestJoin {
                 friend: read_uuid(&mut reader).await?
             }),
-            6 => Ok(Self::JoinGranted {
+            5 => Ok(Self::JoinGranted {
                 connection_id: read_uuid(&mut reader).await?,
                 join_type: match reader.read_u8().await? {
                     0 => JoinType::UPnP { port: reader.read_u16().await? },
@@ -76,10 +72,10 @@ impl WorldHostC2SMessage {
                     )))
                 }
             }),
-            7 => Ok(Self::QueryRequest {
+            6 => Ok(Self::QueryRequest {
                 friend: read_uuid(&mut reader).await?
             }),
-            8 => Ok(Self::QueryResponse {
+            7 => Ok(Self::QueryResponse {
                 connection_id: read_uuid(&mut reader).await?,
                 data: {
                     let mut buf = Vec::with_capacity(reader.read_u32().await? as usize);
