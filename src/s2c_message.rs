@@ -9,7 +9,8 @@ pub enum WorldHostS2CMessage {
     IsOnlineTo { user: Uuid, connection_id: Uuid },
     OnlineGame { ip: String },
     FriendRequest { from_user: Uuid },
-    WentInGame { user: Uuid }
+    PublishedWorld { user: Uuid },
+    ClosedWorld { user: Uuid },
 }
 
 impl WorldHostS2CMessage {
@@ -20,22 +21,26 @@ impl WorldHostS2CMessage {
             Self::Error { message } => {
                 writer.write_u8(0).await?;
                 write_string(&mut writer, message).await?;
-            },
+            }
             Self::IsOnlineTo { user, connection_id } => {
                 writer.write_u8(1).await?;
                 write_uuid(&mut writer, user).await?;
                 write_uuid(&mut writer, connection_id).await?;
-            },
+            }
             Self::OnlineGame { ip } => {
                 writer.write_u8(2).await?;
                 write_string(&mut writer, ip).await?;
-            },
+            }
             Self::FriendRequest { from_user } => {
                 writer.write_u8(3).await?;
                 write_uuid(&mut writer, from_user).await?;
-            },
-            Self::WentInGame { user } => {
+            }
+            Self::PublishedWorld { user } => {
                 writer.write_u8(4).await?;
+                write_uuid(&mut writer, user).await?;
+            }
+            Self::ClosedWorld { user } => {
+                writer.write_u8(5).await?;
                 write_uuid(&mut writer, user).await?;
             }
         };

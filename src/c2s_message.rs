@@ -21,7 +21,8 @@ pub enum WorldHostC2SMessage {
     ListOnline { friends: Vec<Uuid> },
     IsOnlineTo { connection_id: Uuid },
     FriendRequest { to_user: Uuid },
-    WentInGame { friends: Vec<Uuid> }
+    PublishedWorld { friends: Vec<Uuid> },
+    ClosedWorld { friends: Vec<Uuid> },
 }
 
 impl WorldHostC2SMessage {
@@ -47,7 +48,15 @@ impl WorldHostC2SMessage {
                 for _ in 0..count {
                     result.push(read_uuid(&mut reader).await?);
                 }
-                Ok(Self::WentInGame { friends: result })
+                Ok(Self::PublishedWorld { friends: result })
+            }
+            4 => {
+                let count = reader.read_u32().await?;
+                let mut result = Vec::new();
+                for _ in 0..count {
+                    result.push(read_uuid(&mut reader).await?);
+                }
+                Ok(Self::ClosedWorld { friends: result })
             }
             type_id => Err(Box::new(UnknownTypeIdError(type_id)))
         }

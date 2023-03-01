@@ -144,7 +144,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                             }
                         }
                     }
-                },
+                }
                 WorldHostC2SMessage::IsOnlineTo { connection_id } => {
                     let mut connection = connection.lock().await;
                     let message = WorldHostS2CMessage::OnlineGame { ip: match connection.state {
@@ -177,10 +177,10 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                             }
                         }
                     }
-                },
-                WorldHostC2SMessage::WentInGame { friends } => {
+                }
+                WorldHostC2SMessage::PublishedWorld { friends } => {
                     let connection = connection.lock().await;
-                    let message = WorldHostS2CMessage::WentInGame {
+                    let message = WorldHostS2CMessage::PublishedWorld {
                         user: connection.user_uuid
                     }.write().await?;
                     for friend in friends {
@@ -193,7 +193,23 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                             }
                         }
                     }
-                },
+                }
+                WorldHostC2SMessage::ClosedWorld { friends } => {
+                    let connection = connection.lock().await;
+                    let message = WorldHostS2CMessage::ClosedWorld {
+                        user: connection.user_uuid
+                    }.write().await?;
+                    for friend in friends {
+                        let connections = connections.lock().await;
+                        if let Some(connection_ids) = connections.by_user_id(&friend) {
+                            for conn_id in connection_ids {
+                                if let Some(conn) = connections.by_id(conn_id) {
+                                    conn.lock().await.stream.send(message.clone()).await?;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
