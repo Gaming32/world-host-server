@@ -1,8 +1,8 @@
-use std::{io::Cursor, net::SocketAddr, borrow::Cow, sync::Arc, collections::HashMap, fmt::Display};
+use std::{io::Cursor, net::SocketAddr, borrow::Cow, sync::Arc, collections::HashMap, fmt::{Display, Debug}};
 
 use futures::{SinkExt, lock::Mutex};
 use futures_util::StreamExt;
-use log::{info, error, warn, debug};
+use log::{info, error, warn, debug, log_enabled, Level};
 use tokio::net::TcpStream;
 use tokio_tungstenite::WebSocketStream;
 use tungstenite::{Result, Error, protocol::{CloseFrame, frame::coding::CloseCode}};
@@ -54,10 +54,11 @@ impl ConnectionsSetSync {
     }
 
     pub async fn add(&mut self, connection: &Arc<Mutex<Connection>>) {
-        self.connections_by_user_id.entry(connection.lock().await.user_uuid.clone())
+        let locked_connection = connection.lock().await;
+        self.connections_by_user_id.entry(locked_connection.user_uuid.clone())
             .or_insert_with(|| Vec::<Uuid>::new())
-            .push(connection.lock().await.id);
-        self.connections.insert(connection.lock().await.id, connection.clone());
+            .push(locked_connection.id); // This statement deadlocks
+        self.connections.insert(locked_connection.id, connection.clone());
     }
 }
 
@@ -127,12 +128,14 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                     continue;
                 }
             };
+            if log_enabled!(Level::Debug) {
+                debug!("Received message {:?}", message);
+            }
             match message {
                 WorldHostC2SMessage::ListOnline { friends } => {
                     let connection = connection.lock().await;
                     let message = WorldHostS2CMessage::IsOnlineTo {
-                        user: connection.user_uuid,
-                        connection_id: connection.id
+                        user: connection.user_uuid
                     }.write().await?;
                     for friend in friends {
                         let connections = connections.lock().await;

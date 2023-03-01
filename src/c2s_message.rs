@@ -17,6 +17,7 @@ impl Display for UnknownTypeIdError {
 impl Error for UnknownTypeIdError {
 }
 
+#[derive(Debug)]
 pub enum WorldHostC2SMessage {
     ListOnline { friends: Vec<Uuid> },
     IsOnlineTo { connection_id: Uuid },
