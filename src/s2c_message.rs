@@ -7,7 +7,7 @@ use uuid::Uuid;
 pub enum WorldHostS2CMessage {
     Error { message: String },
     IsOnlineTo { user: Uuid, connection_id: Uuid },
-    OnlineGame { ip: String },
+    OnlineGame { ip: String, port: u16 },
     FriendRequest { from_user: Uuid },
     PublishedWorld { user: Uuid },
     ClosedWorld { user: Uuid },
@@ -27,9 +27,10 @@ impl WorldHostS2CMessage {
                 write_uuid(&mut writer, user).await?;
                 write_uuid(&mut writer, connection_id).await?;
             }
-            Self::OnlineGame { ip } => {
+            Self::OnlineGame { ip, port } => {
                 writer.write_u8(2).await?;
                 write_string(&mut writer, ip).await?;
+                writer.write_u16(*port).await?;
             }
             Self::FriendRequest { from_user } => {
                 writer.write_u8(3).await?;
