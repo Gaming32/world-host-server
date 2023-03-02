@@ -1,8 +1,7 @@
 use argparse::{ArgumentParser, Store};
 use connection::ConnectionsSet;
-use futures::lock::Mutex;
 use log::{info, error};
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::Mutex};
 
 use std::{io::Error, sync::Arc};
 

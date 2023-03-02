@@ -1,9 +1,9 @@
 use std::{io::Cursor, net::SocketAddr, borrow::Cow, sync::Arc, collections::HashMap, fmt::{Display, Debug}};
 
-use futures::{SinkExt, lock::Mutex};
+use futures::SinkExt;
 use futures_util::StreamExt;
-use log::{info, error, warn, debug, log_enabled, Level};
-use tokio::net::TcpStream;
+use log::{info, error, warn, debug};
+use tokio::{net::TcpStream, sync::Mutex};
 use tokio_tungstenite::WebSocketStream;
 use tungstenite::{Result, Error, protocol::{CloseFrame, frame::coding::CloseCode}};
 use uuid::Uuid;
@@ -105,8 +105,9 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
         return Ok(());
     };
     info!("Connection opened: {}.", *connection.lock().await);
+    let my_connection_id = connection.lock().await.id.clone();
 
-    connections.lock().await.add(&connection).await;
+    connections.clone().lock().await.add(&connection.clone()).await;
 
     loop {
         let mut connection = connection.lock().await;
@@ -127,20 +128,27 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                     continue;
                 }
             };
-            if log_enabled!(Level::Debug) {
-                debug!("Received message {:?}", message);
-            }
+            // if log_enabled!(Level::Debug) {
+                info!("Received message {:?}", message);
+            // }
+            let lock = connections.clone();
+            let connections_locked = lock.lock().await;
             match message {
                 WorldHostC2SMessage::ListOnline { friends } => {
                     let message = WorldHostS2CMessage::IsOnlineTo {
                         user: connection.user_uuid
                     }.write().await?;
                     for friend in friends {
-                        let connections = connections.lock().await;
-                        if let Some(connection_ids) = connections.by_user_id(&friend) {
+                        if let Some(connection_ids) = connections_locked.by_user_id(&friend) {
                             for conn_id in connection_ids {
-                                if let Some(conn) = connections.by_id(conn_id) {
-                                    conn.lock().await.stream.send(message.clone()).await?;
+                                if *conn_id == my_connection_id {
+                                    continue;
+                                }
+                                if let Some(conn) = connections_locked.by_id(conn_id) {
+                                    // if conn.try_lock().is_err() {
+                                    //     error!("DEADLOCK!!!");
+                                    // }
+                                    conn.clone().lock().await.stream.send(message.clone()).await?;
                                 }
                             }
                         }
@@ -150,11 +158,13 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                     let message = WorldHostS2CMessage::FriendRequest {
                         from_user: connection.user_uuid
                     }.write().await?;
-                    let connections = connections.lock().await;
-                    if let Some(connection_ids) = connections.by_user_id(&to_user) {
+                    if let Some(connection_ids) = connections_locked.by_user_id(&to_user) {
                         for conn_id in connection_ids {
-                            if let Some(conn) = connections.by_id(conn_id) {
-                                conn.lock().await.stream.send(message.clone()).await?;
+                            if *conn_id == my_connection_id {
+                                continue;
+                            }
+                            if let Some(conn) = connections_locked.by_id(conn_id) {
+                                conn.clone().lock().await.stream.send(message.clone()).await?;
                             }
                         }
                     }
@@ -164,11 +174,16 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                         user: connection.user_uuid
                     }.write().await?;
                     for friend in friends {
-                        let connections = connections.lock().await;
-                        if let Some(connection_ids) = connections.by_user_id(&friend) {
+                        if let Some(connection_ids) = connections_locked.by_user_id(&friend) {
                             for conn_id in connection_ids {
-                                if let Some(conn) = connections.by_id(conn_id) {
-                                    conn.lock().await.stream.send(message.clone()).await?;
+                                if *conn_id == my_connection_id {
+                                    continue;
+                                }
+                                if let Some(conn) = connections_locked.by_id(conn_id) {
+                                    // if conn.try_lock().is_err() {
+                                    //     error!("DEADLOCK!!!");
+                                    // }
+                                    conn.clone().lock().await.stream.send(message.clone()).await?;
                                 }
                             }
                         }
@@ -179,11 +194,16 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                         user: connection.user_uuid
                     }.write().await?;
                     for friend in friends {
-                        let connections = connections.lock().await;
-                        if let Some(connection_ids) = connections.by_user_id(&friend) {
+                        if let Some(connection_ids) = connections_locked.by_user_id(&friend) {
                             for conn_id in connection_ids {
-                                if let Some(conn) = connections.by_id(conn_id) {
-                                    conn.lock().await.stream.send(message.clone()).await?;
+                                if *conn_id == my_connection_id {
+                                    continue;
+                                }
+                                if let Some(conn) = connections_locked.by_id(conn_id) {
+                                    // if conn.try_lock().is_err() {
+                                    //     error!("DEADLOCK!!!");
+                                    // }
+                                    conn.clone().lock().await.stream.send(message.clone()).await?;
                                 }
                             }
                         }
@@ -194,11 +214,13 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                         user: friend,
                         connection_id: connection.id
                     }.write().await?;
-                    let connections = connections.lock().await;
-                    if let Some(connection_ids) = connections.by_user_id(&friend) {
+                    if let Some(connection_ids) = connections_locked.by_user_id(&friend) {
                         if let Some(conn_id) = connection_ids.last() {
-                            if let Some(conn) = connections.by_id(conn_id) {
-                                conn.lock().await.stream.send(message.clone()).await?;
+                            if *conn_id == my_connection_id {
+                                continue;
+                            }
+                            if let Some(conn) = connections_locked.by_id(conn_id) {
+                                conn.clone().lock().await.stream.send(message.clone()).await?;
                             }
                         }
                     }
@@ -214,9 +236,11 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                             port: config.java_port
                         }
                     }.write().await?;
-                    let connections = connections.lock().await;
-                    if let Some(conn) = connections.by_id(&connection_id) {
-                        conn.lock().await.stream.send(message.clone()).await?;
+                    if connection_id == my_connection_id {
+                        continue;
+                    }
+                    if let Some(conn) = connections_locked.by_id(&connection_id) {
+                        conn.clone().lock().await.stream.send(message.clone()).await?;
                     }
                 }
                 WorldHostC2SMessage::QueryRequest { friend } => {
@@ -224,11 +248,13 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                         friend: connection.user_uuid,
                         connection_id: connection.id
                     }.write().await?;
-                    let connections = connections.lock().await;
-                    if let Some(connection_ids) = connections.by_user_id(&friend) {
+                    if let Some(connection_ids) = connections_locked.by_user_id(&friend) {
                         if let Some(conn_id) = connection_ids.last() {
-                            if let Some(conn) = connections.by_id(conn_id) {
-                                conn.lock().await.stream.send(message.clone()).await?;
+                            if *conn_id == my_connection_id {
+                                continue;
+                            }
+                            if let Some(conn) = connections_locked.by_id(conn_id) {
+                                conn.clone().lock().await.stream.send(message.clone()).await?;
                             }
                         }
                     }
@@ -238,12 +264,16 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                         friend: connection.user_uuid,
                         data
                     }.write().await?;
-                    let connections = connections.lock().await;
-                    if let Some(conn) = connections.by_id(&connection_id) {
-                        conn.lock().await.stream.send(message.clone()).await?;
+                    if connection_id == my_connection_id {
+                        continue;
+                    }
+                    if let Some(conn) = connections_locked.by_id(&connection_id) {
+                        conn.clone().lock().await.stream.send(message.clone()).await?;
                     }
                 }
             }
+            drop(connections_locked);
+            drop(lock);
         }
     }
 
