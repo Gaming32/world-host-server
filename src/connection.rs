@@ -108,14 +108,17 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
 
     connections.lock().await.add(&connection).await;
 
-    while let Some(msg) = connection.lock().await.stream.next().await {
-        let msg = msg?;
+    loop {
+        let mut connection = connection.lock().await;
+        let msg = match connection.stream.next().await {
+            Some(msg) => msg?,
+            None => break
+        };
         if msg.is_binary() {
             let message = match WorldHostC2SMessage::read(Cursor::new(msg.into_data())).await {
                 Ok(message) => message,
                 Err(err) => {
-                    connection.lock()
-                        .await
+                    connection
                         .stream
                         .send(WorldHostS2CMessage::Error {
                             message: err.to_string()
@@ -129,7 +132,6 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
             }
             match message {
                 WorldHostC2SMessage::ListOnline { friends } => {
-                    let connection = connection.lock().await;
                     let message = WorldHostS2CMessage::IsOnlineTo {
                         user: connection.user_uuid
                     }.write().await?;
@@ -146,7 +148,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 }
                 WorldHostC2SMessage::FriendRequest { to_user } => {
                     let message = WorldHostS2CMessage::FriendRequest {
-                        from_user: connection.lock().await.user_uuid
+                        from_user: connection.user_uuid
                     }.write().await?;
                     let connections = connections.lock().await;
                     if let Some(connection_ids) = connections.by_user_id(&to_user) {
@@ -159,7 +161,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 }
                 WorldHostC2SMessage::PublishedWorld { friends } => {
                     let message = WorldHostS2CMessage::PublishedWorld {
-                        user: connection.lock().await.user_uuid
+                        user: connection.user_uuid
                     }.write().await?;
                     for friend in friends {
                         let connections = connections.lock().await;
@@ -174,7 +176,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 }
                 WorldHostC2SMessage::ClosedWorld { friends } => {
                     let message = WorldHostS2CMessage::ClosedWorld {
-                        user: connection.lock().await.user_uuid
+                        user: connection.user_uuid
                     }.write().await?;
                     for friend in friends {
                         let connections = connections.lock().await;
@@ -190,7 +192,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 WorldHostC2SMessage::RequestJoin { friend } => {
                     let message = WorldHostS2CMessage::RequestJoin {
                         user: friend,
-                        connection_id: connection.lock().await.id
+                        connection_id: connection.id
                     }.write().await?;
                     let connections = connections.lock().await;
                     if let Some(connection_ids) = connections.by_user_id(&friend) {
@@ -208,7 +210,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                             port
                         },
                         JoinType::Proxy => WorldHostS2CMessage::OnlineGame {
-                            ip: "connect0000-".to_string() + &connection.lock().await.id.to_string() + "." + &config.base_ip,
+                            ip: "connect0000-".to_string() + &connection.id.to_string() + "." + &config.base_ip,
                             port: 25565
                         }
                     }.write().await?;
@@ -218,7 +220,6 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                     }
                 }
                 WorldHostC2SMessage::QueryRequest { friend } => {
-                    let connection = connection.lock().await;
                     let message = WorldHostS2CMessage::QueryRequest {
                         friend: connection.user_uuid,
                         connection_id: connection.id
@@ -234,7 +235,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 }
                 WorldHostC2SMessage::QueryResponse { connection_id, data } => {
                     let message = WorldHostS2CMessage::QueryResponse {
-                        friend: connection.lock().await.user_uuid,
+                        friend: connection.user_uuid,
                         data
                     }.write().await?;
                     let connections = connections.lock().await;
