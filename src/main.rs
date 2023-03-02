@@ -16,19 +16,22 @@ mod util;
 #[derive(Debug)]
 pub struct ServerConfig {
     addr: String,
-    base_ip: String
+    base_ip: String,
+    java_port: u16
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let mut config: ServerConfig = ServerConfig {
         addr: "0.0.0.0:9646".to_string(),
-        base_ip: "".to_string()
+        base_ip: "".to_string(),
+        java_port: 25565
     };
     {
         let mut parser = ArgumentParser::new();
         parser.refer(&mut config.addr).add_option(&["-a", "--addr"], Store, "Address to run on");
         parser.refer(&mut config.base_ip).add_option(&["-b", "--base-addr"], Store, "Base address to use for proxy connections");
+        parser.refer(&mut config.java_port).add_option(&["-J", "--java-port"], Store, "Port to use for Java Edition proxy connections");
         parser.parse_args_or_exit();
     }
 

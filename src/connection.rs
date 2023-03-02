@@ -211,7 +211,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                         },
                         JoinType::Proxy => WorldHostS2CMessage::OnlineGame {
                             ip: "connect0000-".to_string() + &connection.id.to_string() + "." + &config.base_ip,
-                            port: 25565
+                            port: config.java_port
                         }
                     }.write().await?;
                     let connections = connections.lock().await;
