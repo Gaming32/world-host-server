@@ -1,7 +1,7 @@
 use argparse::{ArgumentParser, Store};
 use connection::ConnectionsSet;
 use log::{info, error};
-use tokio::{net::TcpListener, sync::Mutex};
+use tokio::{net::TcpListener, sync::RwLock};
 
 use std::{io::Error, sync::Arc};
 
@@ -50,7 +50,7 @@ async fn main() -> Result<(), Error> {
     };
     info!("Listening on {}", config.addr);
 
-    let connections: ConnectionsSet = Arc::new(Mutex::new(ConnectionsSetSync::new()));
+    let connections: ConnectionsSet = Arc::new(RwLock::new(ConnectionsSetSync::new()));
     let config = Arc::new(config);
 
     while let Ok((stream, _)) = listener.accept().await {

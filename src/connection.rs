@@ -3,7 +3,7 @@ use std::{io::Cursor, net::SocketAddr, borrow::Cow, sync::Arc, collections::Hash
 use futures::SinkExt;
 use futures_util::StreamExt;
 use log::{info, error, warn, debug};
-use tokio::{net::TcpStream, sync::Mutex};
+use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::WebSocketStream;
 use tungstenite::{Result, Error, protocol::{CloseFrame, frame::coding::CloseCode}};
 use uuid::Uuid;
@@ -30,7 +30,7 @@ impl Display for Connection {
 }
 
 pub struct ConnectionsSetSync {
-    connections: HashMap<Uuid, Arc<Mutex<Connection>>>,
+    connections: HashMap<Uuid, Arc<RwLock<Connection>>>,
     connections_by_user_id: HashMap<Uuid, Vec<Uuid>>
 }
 
@@ -42,7 +42,7 @@ impl ConnectionsSetSync {
         }
     }
 
-    pub fn by_id(&self, id: &Uuid) -> Option<&Arc<Mutex<Connection>>> {
+    pub fn by_id(&self, id: &Uuid) -> Option<&Arc<RwLock<Connection>>> {
         self.connections.get(id)
     }
 
@@ -50,8 +50,8 @@ impl ConnectionsSetSync {
         self.connections_by_user_id.get(user_id)
     }
 
-    pub async fn add(&mut self, connection: &Arc<Mutex<Connection>>) {
-        let locked_connection = connection.lock().await;
+    pub async fn add(&mut self, connection: &Arc<RwLock<Connection>>) {
+        let locked_connection = connection.read().await;
         self.connections_by_user_id.entry(locked_connection.user_uuid.clone())
             .or_insert_with(|| Vec::<Uuid>::new())
             .push(locked_connection.id);
@@ -59,7 +59,7 @@ impl ConnectionsSetSync {
     }
 }
 
-pub type ConnectionsSet = Arc<Mutex<ConnectionsSetSync>>;
+pub type ConnectionsSet = Arc<RwLock<ConnectionsSetSync>>;
 
 pub async fn accept_connection(stream: TcpStream, connections: ConnectionsSet, config: Arc<ServerConfig>) {
     if let Err(e) = handle_connection(stream, connections, config).await {
@@ -85,7 +85,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 reason: Cow::Borrowed("Invalid handshake: not binary.")
             })).await;
         }
-        Arc::new(Mutex::new(Connection {
+        Arc::new(RwLock::new(Connection {
             id: Uuid::new_v4(),
             address: peer_addr,
             user_uuid: match read_uuid(&mut Cursor::new(msg.into_data())).await {
@@ -104,13 +104,13 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
         warn!("Connection from {} terminated before handshake.", peer_addr);
         return Ok(());
     };
-    info!("Connection opened: {}.", *connection.lock().await);
-    let my_connection_id = connection.lock().await.id.clone();
+    info!("Connection opened: {}.", *connection.read().await);
+    let my_connection_id = connection.read().await.id.clone();
 
-    connections.clone().lock().await.add(&connection.clone()).await;
+    connections.clone().write().await.add(&connection.clone()).await;
 
     loop {
-        let mut connection = connection.lock().await;
+        let mut connection = connection.write().await;
         let msg = match connection.stream.next().await {
             Some(msg) => msg?,
             None => break
@@ -132,7 +132,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                 info!("Received message {:?}", message);
             // }
             let lock = connections.clone();
-            let connections_locked = lock.lock().await;
+            let connections_locked = lock.read().await;
             match message {
                 WorldHostC2SMessage::ListOnline { friends } => {
                     let message = WorldHostS2CMessage::IsOnlineTo {
@@ -148,7 +148,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                                     // if conn.try_lock().is_err() {
                                     //     error!("DEADLOCK!!!");
                                     // }
-                                    conn.clone().lock().await.stream.send(message.clone()).await?;
+                                    conn.write().await.stream.send(message.clone()).await?;
                                 }
                             }
                         }
@@ -164,7 +164,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                                 continue;
                             }
                             if let Some(conn) = connections_locked.by_id(conn_id) {
-                                conn.clone().lock().await.stream.send(message.clone()).await?;
+                                conn.write().await.stream.send(message.clone()).await?;
                             }
                         }
                     }
@@ -183,7 +183,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                                     // if conn.try_lock().is_err() {
                                     //     error!("DEADLOCK!!!");
                                     // }
-                                    conn.clone().lock().await.stream.send(message.clone()).await?;
+                                    conn.write().await.stream.send(message.clone()).await?;
                                 }
                             }
                         }
@@ -203,7 +203,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                                     // if conn.try_lock().is_err() {
                                     //     error!("DEADLOCK!!!");
                                     // }
-                                    conn.clone().lock().await.stream.send(message.clone()).await?;
+                                    conn.write().await.stream.send(message.clone()).await?;
                                 }
                             }
                         }
@@ -220,7 +220,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                                 continue;
                             }
                             if let Some(conn) = connections_locked.by_id(conn_id) {
-                                conn.clone().lock().await.stream.send(message.clone()).await?;
+                                conn.write().await.stream.send(message.clone()).await?;
                             }
                         }
                     }
@@ -240,7 +240,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                         continue;
                     }
                     if let Some(conn) = connections_locked.by_id(&connection_id) {
-                        conn.clone().lock().await.stream.send(message.clone()).await?;
+                        conn.write().await.stream.send(message.clone()).await?;
                     }
                 }
                 WorldHostC2SMessage::QueryRequest { friend } => {
@@ -254,7 +254,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                                 continue;
                             }
                             if let Some(conn) = connections_locked.by_id(conn_id) {
-                                conn.clone().lock().await.stream.send(message.clone()).await?;
+                                conn.write().await.stream.send(message.clone()).await?;
                             }
                         }
                     }
@@ -268,7 +268,7 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
                         continue;
                     }
                     if let Some(conn) = connections_locked.by_id(&connection_id) {
-                        conn.clone().lock().await.stream.send(message.clone()).await?;
+                        conn.write().await.stream.send(message.clone()).await?;
                     }
                 }
             }
@@ -277,6 +277,6 @@ async fn handle_connection(stream: TcpStream, connections: ConnectionsSet, confi
         }
     }
 
-    info!("Connection closed: {}.", *connection.lock().await);
+    info!("Connection closed: {}.", *connection.read().await);
     Ok(())
 }
